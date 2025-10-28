@@ -74,7 +74,6 @@ class FaceViewModel(application: Application) : AndroidViewModel(application) {
      * Valida que:
      * - Solo haya un rostro en la imagen
      * - El DNI no esté ya registrado
-     * - El rostro no sea similar a uno ya registrado (nuevo)
      *
      * @param bitmap Imagen capturada del rostro
      * @param dni Documento de identidad (debe ser único)
@@ -111,35 +110,6 @@ class FaceViewModel(application: Application) : AndroidViewModel(application) {
 
                     // Extraer características faciales (embedding)
                     val embedding = faceProcessor.extractFaceEmbedding(face, bitmap)
-
-                    // NUEVA VALIDACIÓN 3: Verificar si ya existe un rostro similar
-                    val allFacesData = _allFaces.value
-                    if (allFacesData.isNotEmpty()) {
-                        val candidates = allFacesData.map { faceEntity ->
-                            val existingEmbedding = ImageUtils.byteArrayToFloatArray(faceEntity.faceEmbedding)
-                            Pair(faceEntity.id, existingEmbedding)
-                        }
-
-                        val similarMatch = faceProcessor.findBestMatch(
-                            embedding,
-                            candidates,
-                            threshold = DUPLICATE_THRESHOLD // 75% de similitud
-                        )
-
-                        if (similarMatch != null) {
-                            val matchedFace = allFacesData.find { it.id == similarMatch.first }
-                            if (matchedFace != null) {
-                                val similarityPercent = (similarMatch.second * 100).toInt()
-                                return@withContext RegistrationState.AlreadyExists(
-                                    "⚠ Este rostro ya está registrado en la base de datos.\n\n" +
-                                            "Persona: ${matchedFace.nombre}\n" +
-                                            "DNI: ${matchedFace.dni}\n" +
-                                            "Similitud: $similarityPercent%\n\n" +
-                                            "Redirigiendo al inicio..."
-                                )
-                            }
-                        }
-                    }
 
                     // Convertir imagen a bytes para almacenamiento
                     val scaledBitmap = ImageUtils.scaleBitmap(bitmap)

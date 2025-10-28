@@ -47,10 +47,6 @@ fun RegisterScreen(
             kotlinx.coroutines.delay(2000)
             viewModel.resetRegistrationState()
             onNavigateBack()
-        } else if (registrationState is RegistrationState.AlreadyExists) {
-            kotlinx.coroutines.delay(3000)
-            viewModel.resetRegistrationState()
-            onNavigateBack()
         }
     }
 
