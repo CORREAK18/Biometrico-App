@@ -121,7 +121,7 @@ fun CameraScreen(
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
+                .padding(bottom = 45.dp)
         ) {
             Text("Capturar")
         }

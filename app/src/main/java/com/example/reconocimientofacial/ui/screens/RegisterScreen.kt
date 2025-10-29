@@ -145,7 +145,12 @@ fun RegisterScreen(
                     // Campo DNI
                     OutlinedTextField(
                         value = dni,
-                        onValueChange = { dni = it },
+                        onValueChange = { newValue ->
+                            // Solo permitir números y máximo 8 caracteres
+                            if (newValue.all { it.isDigit() } && newValue.length <= 8) {
+                                dni = newValue
+                            }
+                        },
                         label = { Text("DNI") },
                         leadingIcon = {
                             Icon(Icons.Default.AccountBox, "DNI")
@@ -157,8 +162,19 @@ fun RegisterScreen(
                             focusedLabelColor = Color(0xFF4CAF50),
                             focusedLeadingIconColor = Color(0xFF4CAF50),
                             unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
-                        )
+                            focusedContainerColor = Color.White,
+                            errorContainerColor = Color.White,
+                            focusedTextColor = Color.Black,        // ← Texto cuando el campo está activo
+                            unfocusedTextColor = Color.Black,      // ← Texto cuando el campo NO está activo
+                            errorTextColor = Color.Black           // ← Texto cuando hay error
+                        ),
+                        supportingText = {
+                            Text(
+                                text = "${dni.length}/8 dígitos",
+                                color = if (dni.length == 8) Color.Black else Color.Red
+                            )
+                        },
+                        isError = dni.isNotEmpty() && dni.length != 8
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -178,7 +194,8 @@ fun RegisterScreen(
                             focusedLabelColor = Color(0xFF4CAF50),
                             focusedLeadingIconColor = Color(0xFF4CAF50),
                             unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
+                            focusedContainerColor = Color.White,
+                            focusedTextColor = Color.Black
                         )
                     )
 

@@ -36,6 +36,14 @@ interface FaceDao {
     suspend fun getFaceByDni(dni: String): FaceEntity?
 
     /**
+     * Busca un rostro por nombre (útil para validar duplicados)
+     * @param nombre Nombre a buscar
+     * @return FaceEntity si existe, null si no
+     */
+    @Query("SELECT * FROM faces WHERE nombre = :nombre")
+    suspend fun getFaceByNombre(nombre: String): FaceEntity?
+
+    /**
      * Busca un rostro por su ID único
      * @param id ID del rostro
      * @return FaceEntity si existe, null si no

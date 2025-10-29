@@ -36,6 +36,16 @@ class FaceRepository(private val faceDao: FaceDao) {
     }
 
     /**
+     * Busca un rostro por nombre
+     * Utilizado para validar que no existan nombres duplicados
+     * @param nombre Nombre a buscar
+     * @return FaceEntity si existe, null si no existe
+     */
+    suspend fun getFaceByNombre(nombre: String): FaceEntity? {
+        return faceDao.getFaceByNombre(nombre)
+    }
+
+    /**
      * Busca un rostro por su ID único
      * @param id ID del rostro
      * @return FaceEntity si existe, null si no existe

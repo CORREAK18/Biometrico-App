@@ -74,6 +74,8 @@ class FaceViewModel(application: Application) : AndroidViewModel(application) {
      * Valida que:
      * - Solo haya un rostro en la imagen
      * - El DNI no esté ya registrado
+     * - El nombre no esté ya registrado
+     * - El rostro no sea similar a uno ya registrado (foto duplicada)
      *
      * @param bitmap Imagen capturada del rostro
      * @param dni Documento de identidad (debe ser único)
@@ -86,14 +88,22 @@ class FaceViewModel(application: Application) : AndroidViewModel(application) {
 
                 val result = withContext(Dispatchers.Default) {
                     // VALIDACIÓN 1: Verificar que el DNI no esté duplicado
-                    val existingFace = repository.getFaceByDni(dni)
-                    if (existingFace != null) {
+                    val existingFaceByDni = repository.getFaceByDni(dni)
+                    if (existingFaceByDni != null) {
                         return@withContext RegistrationState.Error(
-                            "El DNI '$dni' ya está registrado con el nombre '${existingFace.nombre}'"
+                            "El DNI '$dni' ya está registrado con el nombre '${existingFaceByDni.nombre}'"
                         )
                     }
 
-                    // VALIDACIÓN 2: Detectar rostro en la imagen
+                    // VALIDACIÓN 2: Verificar que el nombre no esté duplicado
+                    val existingFaceByNombre = repository.getFaceByNombre(nombre)
+                    if (existingFaceByNombre != null) {
+                        return@withContext RegistrationState.Error(
+                            "El nombre '$nombre' ya está registrado con DNI '${existingFaceByNombre.dni}'"
+                        )
+                    }
+
+                    // VALIDACIÓN 3: Detectar rostro en la imagen
                     val faces = faceProcessor.detectFaces(bitmap)
 
                     if (faces.isEmpty()) {
@@ -110,6 +120,23 @@ class FaceViewModel(application: Application) : AndroidViewModel(application) {
 
                     // Extraer características faciales (embedding)
                     val embedding = faceProcessor.extractFaceEmbedding(face, bitmap)
+
+                    // VALIDACIÓN 4: Verificar que el rostro no esté duplicado (foto similar)
+                    val allFacesData = _allFaces.value
+                    if (allFacesData.isNotEmpty()) {
+                        // Comparar con todos los rostros registrados
+                        for (existingFace in allFacesData) {
+                            val existingEmbedding = ImageUtils.byteArrayToFloatArray(existingFace.faceEmbedding)
+                            val similarity = faceProcessor.calculateSimilarity(embedding, existingEmbedding)
+
+                            // Si la similitud es muy alta (90% o más), es el mismo rostro
+                            if (similarity >= DUPLICATE_THRESHOLD) {
+                                return@withContext RegistrationState.Error(
+                                    "Este rostro ya está registrado como '${existingFace.nombre}' (DNI: ${existingFace.dni}). Similitud: ${(similarity * 100).toInt()}%"
+                                )
+                            }
+                        }
+                    }
 
                     // Convertir imagen a bytes para almacenamiento
                     val scaledBitmap = ImageUtils.scaleBitmap(bitmap)

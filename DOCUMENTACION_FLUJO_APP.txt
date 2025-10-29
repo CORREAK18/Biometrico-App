@@ -1,0 +1,758 @@
+═══════════════════════════════════════════════════════════════════════════════
+        DOCUMENTACIÓN TÉCNICA - APLICACIÓN DE RECONOCIMIENTO FACIAL
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 ÍNDICE:
+─────────
+1. Arquitectura General
+2. Archivos de la Carpeta DATA - ¿Cuáles son útiles?
+3. Flujo COMPLETO: Registrar Rostro
+4. Flujo COMPLETO: Reconocer Rostro
+5. Flujo COMPLETO: Listar Registrados
+6. Tecnologías Utilizadas
+7. Cómo Funciona el Reconocimiento Facial (Detalles Técnicos)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+1. ARQUITECTURA GENERAL DE LA APLICACIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+La aplicación sigue el patrón MVVM (Model-View-ViewModel) con arquitectura limpia:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          CAPAS DE LA APLICACIÓN                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  UI (Jetpack Compose)                                                   │
+│  ├── HomeScreen.kt           → Pantalla principal con 3 botones        │
+│  ├── RegisterScreen.kt       → Captura foto + datos para registrar     │
+│  ├── RecognizeScreen.kt      → Captura foto y busca coincidencias      │
+│  ├── ViewAllScreen.kt        → Muestra todos los rostros registrados   │
+│  └── CameraScreen.kt         → Componente de cámara (CameraX)          │
+│           ↓                                                             │
+│  VIEWMODEL (Lógica de negocio)                                         │
+│  └── FaceViewModel.kt        → Gestiona estados y lógica de la app     │
+│           ↓                                                             │
+│  REPOSITORY (Abstracción de datos)                                     │
+│  └── FaceRepository.kt       → Intermediario entre ViewModel y BD      │
+│           ↓                                                             │
+│  DATA (Acceso a datos)                                                 │
+│  ├── FaceDao.kt              → Consultas SQL (CRUD)                    │
+│  ├── FaceDatabase.kt         → Configuración de Room (SQLite)          │
+│  └── FaceEntity.kt           → Modelo de datos (tabla faces)           │
+│           ↓                                                             │
+│  ML (Machine Learning)                                                  │
+│  └── FaceRecognitionProcessorMejorado.kt → Detección + Reconocimiento │
+│           ↓                                                             │
+│  UTILS (Utilidades)                                                    │
+│  └── ImageUtils.kt           → Conversión de imágenes                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+2. ARCHIVOS DE LA CARPETA DATA - ¿CUÁLES SON ÚTILES?
+═══════════════════════════════════════════════════════════════════════════════
+
+En la carpeta 'data/' hay 4 archivos. TODOS SON ÚTILES Y NECESARIOS:
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ Archivo                  │ ¿Se Usa? │ Propósito                      │
+├──────────────────────────┼──────────┼────────────────────────────────┤
+│ FaceEntity.kt            │ ✅ SÍ    │ Define la estructura de datos  │
+│                          │          │ (tabla 'faces' en SQLite)      │
+│                          │          │ Campos: id, dni, nombre,       │
+│                          │          │ faceImage, faceEmbedding       │
+├──────────────────────────┼──────────┼────────────────────────────────┤
+│ FaceDao.kt               │ ✅ SÍ    │ Interface con consultas SQL    │
+│                          │          │ (Insert, Select, Delete)       │
+│                          │          │ Usado por Repository           │
+├──────────────────────────┼──────────┼────────────────────────────────┤
+│ FaceDatabase.kt          │ ✅ SÍ    │ Configuración de Room          │
+│                          │          │ (SQLite). Patrón Singleton     │
+│                          │          │ Provee acceso a FaceDao        │
+├──────────────────────────┼──────────┼────────────────────────────────┤
+│ FaceRepository.kt        │ ✅ SÍ    │ Intermediario entre ViewModel  │
+│                          │          │ y la base de datos             │
+│                          │          │ Abstrae la lógica de acceso    │
+└──────────────────────────┴──────────┴────────────────────────────────┘
+
+CONCLUSIÓN: Los 4 archivos son NECESARIOS y están siendo usados activamente.
+
+Flujo de uso:
+  ViewModel → FaceRepository → FaceDao → FaceDatabase → SQLite
+
+
+═══════════════════════════════════════════════════════════════════════════════
+3. FLUJO COMPLETO: REGISTRAR ROSTRO
+═══════════════════════════════════════════════════════════════════════════════
+
+PASO 1: Usuario presiona "Registrar Rostro" en HomeScreen
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: HomeScreen.kt
+📍 Línea: onClick del botón "➕ Registrar Rostro"
+🔧 Acción: navController.navigate(Screen.Register.route)
+📤 Resultado: Navega a RegisterScreen
+
+
+PASO 2: Se abre RegisterScreen (pantalla de registro)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RegisterScreen.kt
+📍 Componentes:
+   - Campo de texto para DNI
+   - Campo de texto para Nombre
+   - Área circular para mostrar foto capturada
+   - Botón "Abrir Cámara"
+   - Botón "Registrar"
+
+
+PASO 3: Usuario presiona "Abrir Cámara"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RegisterScreen.kt
+📍 Línea: showCamera = true
+🔧 Acción: Solicita permiso de cámara y abre CameraScreen
+📤 Resultado: Se muestra el preview de la cámara
+
+
+PASO 4: Usuario captura foto en CameraScreen
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: CameraScreen.kt
+🔧 Tecnología: CameraX (androidx.camera)
+📍 Proceso:
+   1. Inicializa cameraProvider
+   2. Configura ImageCapture
+   3. Al presionar botón captura:
+      - Toma foto con imageCapture.takePicture()
+      - Convierte ImageProxy a Bitmap
+      - Rota la imagen si es necesario
+🔙 Callback: onImageCaptured(bitmap)
+📤 Resultado: Vuelve a RegisterScreen con la imagen capturada
+
+
+PASO 5: Usuario ingresa DNI y Nombre, luego presiona "Registrar"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RegisterScreen.kt
+📍 Línea: onClick del botón "Registrar"
+🔧 Acción: viewModel.registerFace(capturedImage!!, dni, nombre)
+
+
+PASO 6: FaceViewModel procesa el registro
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: FaceViewModel.kt
+📍 Función: registerFace(bitmap, dni, nombre)
+📋 Proceso detallado:
+
+   6.1 Cambia estado a "Processing"
+       _registrationState.value = RegistrationState.Processing
+
+   6.2 VALIDACIÓN 1: Verifica DNI duplicado
+       val existingFace = repository.getFaceByDni(dni)
+       ↓
+       📂 FaceRepository.kt → getFaceByDni(dni)
+       ↓
+       📂 FaceDao.kt → Query SQL: SELECT * FROM faces WHERE dni = :dni
+
+       Si existe → Error: "DNI ya registrado"
+
+   6.3 VALIDACIÓN 2: Detecta rostros en la imagen
+       val faces = faceProcessor.detectFaces(bitmap)
+       ↓
+       📂 FaceRecognitionProcessorMejorado.kt
+       📍 Función: detectFaces(bitmap)
+       🔧 Tecnología: ML Kit Face Detection (Google)
+
+       Proceso interno:
+       - Convierte Bitmap a InputImage
+       - Usa detector.process(image)
+       - ML Kit analiza la imagen y busca rostros
+       - Retorna lista de objetos Face con landmarks y ángulos
+
+       Validaciones:
+       - Si faces.isEmpty() → Error: "No se detectó rostro"
+       - Si faces.size > 1 → Error: "Múltiples rostros detectados"
+
+   6.4 Extrae características faciales (EMBEDDING)
+       val embedding = faceProcessor.extractFaceEmbedding(face, bitmap)
+       ↓
+       📂 FaceRecognitionProcessorMejorado.kt
+       📍 Función: extractFaceEmbedding(face, bitmap)
+
+       ┌─────────────────────────────────────────────────────────┐
+       │  CAJA NEGRA: Generación de Vector de Características   │
+       ├─────────────────────────────────────────────────────────┤
+       │  ENTRADA:                                               │
+       │    - Face object (landmarks, ángulos de rotación, etc.) │
+       │    - Bitmap (imagen del rostro)                         │
+       │                                                         │
+       │  PROCESO INTERNO (250 dimensiones):                     │
+       │    1. Extrae 12 landmarks (ojos, nariz, boca, etc.)     │
+       │    2. Calcula 6 dimensiones básicas del rostro          │
+       │    3. Calcula 48 posiciones (absolutas + relativas)     │
+       │    4. Calcula 40 distancias entre landmarks             │
+       │    5. Calcula 20 ángulos entre landmarks                │
+       │    6. Calcula 30 ratios y proporciones faciales         │
+       │    7. Agrega 6 ángulos de rotación de cabeza            │
+       │    8. Agrega 6 valores de expresiones faciales          │
+       │    9. Calcula 40 características derivadas avanzadas    │
+       │   10. Calcula 30 distancias cruzadas adicionales        │
+       │   11. Calcula 24 ángulos complejos adicionales          │
+       │   12. Normaliza todo el vector a magnitud 1             │
+       │                                                         │
+       │  SALIDA:                                                │
+       │    FloatArray de ~250 números                           │
+       │    Ejemplo: [0.023, 0.154, 0.089, ..., 0.456, 0.123]   │
+       │                                                         │
+       │  Este vector es la "huella digital" única del rostro    │
+       └─────────────────────────────────────────────────────────┘
+
+   6.5 Prepara datos para almacenamiento
+       - Escala imagen: ImageUtils.scaleBitmap(bitmap)
+       - Convierte Bitmap a ByteArray: ImageUtils.bitmapToByteArray()
+       - Convierte FloatArray a ByteArray: ImageUtils.floatArrayToByteArray()
+
+   6.6 Crea entidad y guarda en base de datos
+       val faceEntity = FaceEntity(
+           dni = dni,
+           nombre = nombre,
+           faceImage = imageBytes,
+           faceEmbedding = embeddingBytes
+       )
+
+       repository.insertFace(faceEntity)
+       ↓
+       📂 FaceRepository.kt → insertFace(faceEntity)
+       ↓
+       📂 FaceDao.kt → @Insert suspend fun insertFace(face: FaceEntity)
+       ↓
+       📂 FaceDatabase.kt → Room ejecuta INSERT INTO faces
+       ↓
+       💾 SQLite: Se guarda en la base de datos local
+
+   6.7 Actualiza estado a "Success"
+       _registrationState.value = RegistrationState.Success("✓ Rostro registrado")
+
+
+PASO 7: RegisterScreen reacciona al estado
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RegisterScreen.kt
+📍 LaunchedEffect observa registrationState
+🔧 Acción:
+   - Muestra mensaje de éxito por 2 segundos
+   - Resetea el estado
+   - Navega de vuelta a HomeScreen
+
+
+═══════════════════════════════════════════════════════════════════════════════
+4. FLUJO COMPLETO: RECONOCER ROSTRO
+═══════════════════════════════════════════════════════════════════════════════
+
+PASO 1: Usuario presiona "Reconocer Rostro" en HomeScreen
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: HomeScreen.kt
+📍 Línea: onClick del botón "🔍 Reconocer Rostro"
+🔧 Acción: navController.navigate(Screen.Recognize.route)
+📤 Resultado: Navega a RecognizeScreen
+
+
+PASO 2: Se abre RecognizeScreen
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RecognizeScreen.kt
+📍 Componentes:
+   - Área para mostrar foto capturada
+   - Botón "Abrir Cámara"
+   - Card para mostrar resultado del reconocimiento
+
+
+PASO 3: Usuario presiona "Abrir Cámara" y captura foto
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RecognizeScreen.kt → CameraScreen.kt
+🔧 Proceso: (Igual que en registro)
+🔙 Callback: onImageCaptured = { bitmap ->
+                capturedImage = bitmap
+                viewModel.recognizeFace(bitmap)  ← LLAMA RECONOCIMIENTO
+             }
+
+
+PASO 4: FaceViewModel procesa el reconocimiento
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: FaceViewModel.kt
+📍 Función: recognizeFace(bitmap)
+📋 Proceso detallado:
+
+   4.1 Detecta rostro en la imagen
+       val faces = faceProcessor.detectFaces(bitmap)
+
+       Validaciones:
+       - Si faces.isEmpty() → "No se detectó rostro"
+       - Si faces.size > 1 → "Múltiples rostros detectados"
+
+   4.2 Extrae embedding del rostro capturado
+       val queryEmbedding = faceProcessor.extractFaceEmbedding(face, bitmap)
+
+       ↓ Genera vector de 250 números (igual que en registro)
+
+   4.3 Obtiene todos los rostros registrados de la BD
+       val allFacesData = _allFaces.value
+
+       (Este StateFlow se actualiza automáticamente desde la BD)
+
+   4.4 Prepara lista de candidatos
+       val candidates = allFacesData.map { faceEntity ->
+           val embedding = ImageUtils.byteArrayToFloatArray(faceEntity.faceEmbedding)
+           Pair(faceEntity.id, embedding)
+       }
+
+       Resultado: Lista de pares (ID, Vector250D) de cada persona registrada
+
+   4.5 Busca la mejor coincidencia
+       val bestMatch = faceProcessor.findBestMatch(
+           queryEmbedding,
+           candidates,
+           threshold = 0.80f  ← UMBRAL DE CONFIANZA: 80%
+       )
+       ↓
+       📂 FaceRecognitionProcessorMejorado.kt
+       📍 Función: findBestMatch()
+
+       ┌─────────────────────────────────────────────────────────┐
+       │  CAJA NEGRA: Búsqueda de Mejor Coincidencia            │
+       ├─────────────────────────────────────────────────────────┤
+       │  ENTRADA:                                               │
+       │    - queryEmbedding: Vector de 250 números (rostro      │
+       │      capturado)                                         │
+       │    - candidates: Lista de vectores de 250 números       │
+       │      (rostros registrados)                              │
+       │    - threshold: 0.80 (80% de confianza mínima)          │
+       │                                                         │
+       │  PROCESO INTERNO:                                       │
+       │    Para cada candidato:                                 │
+       │      1. Calcula similitud coseno:                       │
+       │         similarity = calculateSimilarity(queryEmbedding,│
+       │                                          candidateEmbed)│
+       │                                                         │
+       │         Fórmula:                                        │
+       │         dotProduct = A[0]*B[0] + A[1]*B[1] + ... +      │
+       │                      A[249]*B[249]                      │
+       │         similarity = (dotProduct + 1) / 2               │
+       │                                                         │
+       │      2. Si similarity > bestSimilarity:                 │
+       │            Actualiza bestMatch = (id, similarity)       │
+       │                                                         │
+       │  INTERPRETACIÓN DE SIMILITUD:                           │
+       │    1.00 (100%) → Idénticos (mismo rostro)               │
+       │    0.85 (85%)  → Muy similares (probablemente mismo)    │
+       │    0.80 (80%)  → Umbral mínimo (aceptado)               │
+       │    0.75 (75%)  → Similares (RECHAZADO - bajo umbral)    │
+       │    0.60 (60%)  → Algo parecidos (RECHAZADO)             │
+       │    0.40 (40%)  → Diferentes (RECHAZADO)                 │
+       │                                                         │
+       │  SALIDA:                                                │
+       │    - Si encuentra match >= 80%: Pair(id, similarity)    │
+       │    - Si no hay match >= 80%: null                       │
+       └─────────────────────────────────────────────────────────┘
+
+   4.6 Procesa el resultado
+       Si bestMatch != null:
+           - Busca el FaceEntity correspondiente al ID
+           - Crea RecognitionResult con:
+               found = true
+               name = matchedFace.nombre
+               dni = matchedFace.dni
+               similarity = bestMatch.second
+               message = "✓ Rostro reconocido con 85% de confianza"
+
+       Si bestMatch == null:
+           RecognitionResult(
+               found = false,
+               message = "✗ Rostro no reconocido. Similitud < 80%"
+           )
+
+   4.7 Actualiza el estado
+       _recognitionResult.value = result
+
+
+PASO 5: RecognizeScreen muestra el resultado
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: RecognizeScreen.kt
+📍 Observa recognitionResult StateFlow
+🔧 Muestra:
+   Si found = true:
+       - Card verde con ícono ✓
+       - Nombre de la persona
+       - DNI
+       - Porcentaje de confianza
+
+   Si found = false:
+       - Card roja con ícono ✗
+       - Mensaje de error
+
+
+═══════════════════════════════════════════════════════════════════════════════
+5. FLUJO COMPLETO: LISTAR REGISTRADOS
+═══════════════════════════════════════════════════════════════════════════════
+
+PASO 1: Usuario presiona "Ver Registrados" en HomeScreen
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: HomeScreen.kt
+📍 Línea: onClick del botón "📋 Ver Registrados"
+🔧 Acción: navController.navigate(Screen.ViewAll.route)
+📤 Resultado: Navega a ViewAllScreen
+
+
+PASO 2: ViewAllScreen se inicializa
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: ViewAllScreen.kt
+📍 Observa: val allFaces by viewModel.allFaces.collectAsState()
+
+
+PASO 3: FaceViewModel mantiene lista actualizada
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: FaceViewModel.kt
+📍 Bloque init:
+
+   viewModelScope.launch {
+       repository.allFaces.collect { faces →
+           _allFaces.value = faces
+       }
+   }
+
+   Flujo de datos:
+   ↓
+   📂 FaceRepository.kt
+   📍 val allFaces: Flow<List<FaceEntity>> = faceDao.getAllFaces()
+   ↓
+   📂 FaceDao.kt
+   📍 @Query("SELECT * FROM faces")
+      fun getAllFaces(): Flow<List<FaceEntity>>
+   ↓
+   📂 FaceDatabase.kt (Room ejecuta query)
+   ↓
+   💾 SQLite: SELECT * FROM faces
+   ↓
+   🔄 Room convierte resultados a List<FaceEntity>
+   ↓
+   🔄 Flow emite actualizaciones automáticas cuando hay cambios en BD
+
+
+PASO 4: ViewAllScreen renderiza la lista
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: ViewAllScreen.kt
+📍 Componente: LazyColumn
+
+   Para cada FaceEntity en allFaces:
+       - Convierte faceImage (ByteArray) a Bitmap
+       - Muestra en un Card:
+           ├── Foto circular del rostro
+           ├── Nombre de la persona
+           ├── DNI
+           ├── Fecha de registro
+           └── Botón "Eliminar" (icono de basura)
+
+
+PASO 5: Usuario presiona botón "Eliminar" en un registro
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: ViewAllScreen.kt
+📍 onClick del IconButton(Delete)
+🔧 Acción:
+   1. Muestra AlertDialog de confirmación
+   2. Si usuario confirma:
+      viewModel.deleteFace(id)
+      ↓
+      📂 FaceViewModel.kt
+      📍 Función: deleteFace(id)
+
+      viewModelScope.launch {
+          repository.deleteFaceById(id)
+      }
+      ↓
+      📂 FaceRepository.kt → deleteFaceById(id)
+      ↓
+      📂 FaceDao.kt
+      📍 @Query("DELETE FROM faces WHERE id = :id")
+      ↓
+      💾 SQLite: DELETE FROM faces WHERE id = 5
+      ↓
+      🔄 Room notifica cambio en la BD
+      ↓
+      🔄 Flow en allFaces emite nueva lista (sin el eliminado)
+      ↓
+      🔄 ViewAllScreen se actualiza automáticamente (recompose)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6. TECNOLOGÍAS UTILIZADAS
+═══════════════════════════════════════════════════════════════════════════════
+
+┌────────────────────────────────────────────────────────────────────┐
+│ Tecnología                    │ Propósito                          │
+├───────────────────────────────┼────────────────────────────────────┤
+│ Kotlin                        │ Lenguaje de programación           │
+│ Jetpack Compose               │ UI moderna declarativa             │
+│ Room Database                 │ ORM para SQLite (base de datos)    │
+│ CameraX                       │ Captura de imágenes con cámara     │
+│ ML Kit Face Detection         │ Detección de rostros (Google)      │
+│ Coroutines + Flow             │ Programación asíncrona             │
+│ ViewModel + StateFlow         │ Gestión de estados (MVVM)          │
+│ Navigation Compose            │ Navegación entre pantallas         │
+│ Accompanist Permissions       │ Manejo de permisos de Android      │
+│ Coil                          │ Carga de imágenes                  │
+└───────────────────────────────┴────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+7. CÓMO FUNCIONA EL RECONOCIMIENTO FACIAL (DETALLES TÉCNICOS)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                  PROCESO DE RECONOCIMIENTO FACIAL                   │
+└─────────────────────────────────────────────────────────────────────┘
+
+ETAPA 1: DETECCIÓN DE ROSTRO (ML Kit)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Tecnología: ML Kit Face Detection de Google
+🔧 Qué hace:
+   - Analiza la imagen pixel por pixel
+   - Identifica regiones que parecen caras humanas
+   - Detecta 12 landmarks (puntos clave):
+       ├── Ojo izquierdo
+       ├── Ojo derecho
+       ├── Base de la nariz
+       ├── Boca izquierda
+       ├── Boca derecha
+       ├── Boca inferior
+       ├── Mejilla izquierda
+       ├── Mejilla derecha
+       ├── Oreja izquierda
+       └── Oreja derecha
+   - Calcula ángulos de rotación de la cabeza (Euler angles)
+   - Estima probabilidades de expresiones (sonrisa, ojos abiertos)
+
+📤 Output: Objeto Face con:
+   - boundingBox (rectángulo del rostro)
+   - landmarks (12 puntos)
+   - headEulerAngleX, Y, Z (rotación)
+   - smilingProbability
+   - leftEyeOpenProbability
+   - rightEyeOpenProbability
+
+
+ETAPA 2: EXTRACCIÓN DE CARACTERÍSTICAS (Procesador Mejorado)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: FaceRecognitionProcessorMejorado.kt
+📍 Función: extractFaceEmbedding()
+🔧 Tecnología: Geometría pura (NO usa redes neuronales)
+
+¿POR QUÉ NO USA FACENET O ARCFACE?
+───────────────────────────────────
+FaceNet, MobileFaceNet, ArcFace son modelos de Deep Learning que:
+  - Requieren TensorFlow Lite o PyTorch Mobile
+  - Necesitan archivos .tflite pesados (5-20 MB)
+  - Usan GPU para inferencia rápida
+  - Generan embeddings de 128/512 dimensiones con CNN
+
+Esta app usa un ENFOQUE GEOMÉTRICO:
+  - Solo calcula distancias, ángulos y proporciones
+  - NO necesita modelos pre-entrenados
+  - Más liviano (sin archivos extras)
+  - Suficientemente preciso para casos básicos
+
+PROCESO DE EXTRACCIÓN (250 DIMENSIONES):
+────────────────────────────────────────
+
+Vector[0-5]: Dimensiones básicas del rostro
+  - Ancho del rostro / 1000
+  - Alto del rostro / 1000
+  - Ratio ancho/alto
+  - Área del rostro / 1000000
+  - Posición X
+  - Posición Y
+
+Vector[6-29]: Posiciones absolutas de landmarks (X, Y de cada uno)
+  - leftEye.x / 1000, leftEye.y / 1000
+  - rightEye.x / 1000, rightEye.y / 1000
+  - noseBase.x / 1000, noseBase.y / 1000
+  - ... (12 landmarks × 2 coordenadas = 24 valores)
+
+Vector[30-53]: Posiciones relativas normalizadas
+  - (leftEye.x - faceCenterX) / faceWidth
+  - (leftEye.y - faceCenterY) / faceHeight
+  - ... (12 landmarks × 2 = 24 valores)
+
+Vector[54-93]: Distancias entre landmarks (40 valores)
+  - distance(leftEye, rightEye) / faceWidth
+  - distance(leftEye, noseBase) / faceWidth
+  - distance(rightEye, noseBase) / faceWidth
+  - distance(leftEye, mouthLeft) / faceWidth
+  - ... (40 distancias diferentes)
+
+Vector[94-113]: Ángulos entre landmarks (20 valores)
+  - atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) / π
+  - atan2(nose.y - centerY, nose.x - centerX) / π
+  - Ángulos de triángulos formados por landmarks
+  - ... (20 ángulos diferentes)
+
+Vector[114-143]: Ratios y proporciones faciales (30 valores)
+  - eyeDistance / faceWidth
+  - mouthWidth / faceWidth
+  - mouthWidth / eyeDistance
+  - Simetrías izquierda/derecha
+  - cheekDistance / faceWidth
+  - earDistance / faceWidth
+  - ... (30 proporciones)
+
+Vector[144-149]: Ángulos de rotación de cabeza (6 valores)
+  - headEulerAngleX / 90
+  - (headEulerAngleX)² / 8100
+  - headEulerAngleY / 90
+  - (headEulerAngleY)² / 8100
+  - headEulerAngleZ / 90
+  - (headEulerAngleZ)² / 8100
+
+Vector[150-155]: Expresiones faciales (6 valores)
+  - smilingProbability
+  - leftEyeOpenProbability
+  - rightEyeOpenProbability
+  - Promedio de apertura de ojos
+  - Diferencia entre ojos
+  - Expresión combinada
+
+Vector[156-250]: Características derivadas avanzadas (~94 valores)
+  - Cuadrantes del rostro
+  - Densidad de landmarks
+  - Distancias cruzadas adicionales
+  - Ángulos complejos adicionales
+
+NORMALIZACIÓN FINAL:
+  - Se calcula la magnitud del vector:
+    magnitude = √(v[0]² + v[1]² + ... + v[249]²)
+  - Se divide cada componente por la magnitud:
+    normalizedVector[i] = vector[i] / magnitude
+  - Esto asegura que el vector tenga longitud 1
+
+📤 Output: FloatArray de ~250 números normalizados
+
+
+ETAPA 3: COMPARACIÓN DE VECTORES (Similitud Coseno)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: FaceRecognitionProcessorMejorado.kt
+📍 Función: calculateSimilarity()
+
+FÓRMULA DE SIMILITUD COSENO:
+───────────────────────────
+
+Sean A y B dos vectores de 250 dimensiones:
+
+A = [a₀, a₁, a₂, ..., a₂₄₉]  ← Rostro capturado
+B = [b₀, b₁, b₂, ..., b₂₄₉]  ← Rostro registrado
+
+Producto punto:
+  dotProduct = a₀×b₀ + a₁×b₁ + a₂×b₂ + ... + a₂₄₉×b₂₄₉
+
+Como los vectores están normalizados (magnitud = 1):
+  dotProduct ∈ [-1, 1]
+
+Conversión a rango [0, 1]:
+  similarity = (dotProduct + 1) / 2
+
+INTERPRETACIÓN:
+  similarity = 1.0 → Vectores idénticos (100% iguales)
+  similarity = 0.9 → Muy similares (90% iguales)
+  similarity = 0.8 → Similares (80% iguales) ← UMBRAL MÍNIMO
+  similarity = 0.7 → Algo parecidos (70%)
+  similarity = 0.5 → Diferentes (50%)
+  similarity = 0.0 → Totalmente opuestos (0%)
+
+¿POR QUÉ FUNCIONA?
+  Si dos personas tienen características faciales similares:
+    - Distancia entre ojos parecida → a₅₄ ≈ b₅₄
+    - Ángulo de nariz parecido → a₉₄ ≈ b₉₄
+    - Ratio boca/cara parecido → a₁₁₄ ≈ b₁₁₄
+    - ... y así con las 250 dimensiones
+
+  Entonces: a₀×b₀ + a₁×b₁ + ... será GRANDE
+
+  Si son personas diferentes, muchos valores no coinciden:
+  Entonces: el producto punto será PEQUEÑO
+
+
+ETAPA 4: BÚSQUEDA DEL MEJOR MATCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📂 Archivo: FaceRecognitionProcessorMejorado.kt
+📍 Función: findBestMatch()
+
+ALGORITMO:
+  1. Inicializar bestSimilarity = 0.80 (umbral)
+  2. Para cada rostro registrado en la base de datos:
+       a. similarity = calculateSimilarity(queryVector, candidateVector)
+       b. Si similarity > bestSimilarity:
+            bestSimilarity = similarity
+            bestMatch = (rostroID, similarity)
+  3. Retornar bestMatch (o null si nadie superó el umbral)
+
+EJEMPLO PRÁCTICO:
+  Rostros registrados:
+    - Juan (ID=1): similarity = 0.65 → RECHAZADO (< 0.80)
+    - María (ID=2): similarity = 0.87 → ACEPTADO ✓
+    - Pedro (ID=3): similarity = 0.72 → RECHAZADO (< 0.80)
+
+  Resultado: bestMatch = (2, 0.87) → "María con 87% de confianza"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+AJUSTES DE CONFIGURACIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+📂 Archivo: FaceViewModel.kt
+📍 Línea: companion object
+
+┌──────────────────────────────────────────────────────────────────┐
+│ Constante                │ Valor Actual │ Propósito              │
+├──────────────────────────┼──────────────┼────────────────────────┤
+│ RECOGNITION_THRESHOLD    │ 0.80f (80%)  │ Confianza mínima para  │
+│                          │              │ reconocer un rostro    │
+│                          │              │                        │
+│ DUPLICATE_THRESHOLD      │ 0.90f (90%)  │ Confianza para detectar│
+│                          │              │ rostros duplicados     │
+│                          │              │ (no usado actualmente) │
+└──────────────────────────┴──────────────┴────────────────────────┘
+
+SI QUIERES AJUSTAR LA SENSIBILIDAD:
+  - Aumentar RECOGNITION_THRESHOLD (ej: 0.85) → MÁS ESTRICTO
+    (Menos falsos positivos, pero puede rechazar al usuario legítimo)
+
+  - Disminuir RECOGNITION_THRESHOLD (ej: 0.75) → MÁS FLEXIBLE
+    (Más probabilidad de reconocer, pero también más falsos positivos)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+RESUMEN DE ARCHIVOS CLAVE
+═══════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ Archivo                            │ Responsabilidad               │
+├────────────────────────────────────┼───────────────────────────────┤
+│ MainActivity.kt                    │ Punto de entrada de la app    │
+│ AppNavigation.kt                   │ Control de navegación         │
+│ FaceViewModel.kt                   │ Lógica de negocio principal   │
+│ FaceRecognitionProcessorMejorado   │ Motor de reconocimiento       │
+│ FaceRepository.kt                  │ Abstracción de datos          │
+│ FaceDao.kt                         │ Consultas SQL                 │
+│ FaceDatabase.kt                    │ Configuración de Room         │
+│ FaceEntity.kt                      │ Modelo de datos               │
+│ HomeScreen.kt                      │ Pantalla principal            │
+│ RegisterScreen.kt                  │ Pantalla de registro          │
+│ RecognizeScreen.kt                 │ Pantalla de reconocimiento    │
+│ ViewAllScreen.kt                   │ Pantalla de listado           │
+│ CameraScreen.kt                    │ Componente de cámara          │
+│ ImageUtils.kt                      │ Conversión de imágenes        │
+└────────────────────────────────────┴───────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                              FIN DE LA DOCUMENTACIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+Creado: 2025-10-29
+Versión: 1.0
+Proyecto: Reconocimiento Facial Android
+
