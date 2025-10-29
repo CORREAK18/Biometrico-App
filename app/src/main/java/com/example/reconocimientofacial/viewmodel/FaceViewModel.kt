@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.reconocimientofacial.data.FaceDatabase
 import com.example.reconocimientofacial.data.FaceEntity
 import com.example.reconocimientofacial.data.FaceRepository
-import com.example.reconocimientofacial.ml.FaceRecognitionProcessor
+import com.example.reconocimientofacial.ml.FaceRecognitionProcessorMejorado
 import com.example.reconocimientofacial.utils.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,14 +39,14 @@ data class RecognitionResult(
 class FaceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FaceRepository
-    private val faceProcessor = FaceRecognitionProcessor()
+    private val faceProcessor = FaceRecognitionProcessorMejorado() // ← CAMBIADO: Usar procesador mejorado
 
     // Umbral mínimo de confianza para considerar un rostro como reconocido
     // Valores: 0.0 a 1.0, donde 1.0 es una coincidencia perfecta
-    // 0.6 = 60% de confianza mínima para aceptar el reconocimiento
+    // 0.80 = 80% de confianza mínima para aceptar el reconocimiento (MÁS ESTRICTO)
     companion object {
-        const val RECOGNITION_THRESHOLD = 0.6f // 60% de confianza mínima
-        const val DUPLICATE_THRESHOLD = 0.75f // 75% de similitud para detectar duplicados
+        const val RECOGNITION_THRESHOLD = 0.80f // ← CAMBIADO: Aumentado a 80% para ser más estricto
+        const val DUPLICATE_THRESHOLD = 0.90f   // ← CAMBIADO: Aumentado a 90% para duplicados
     }
 
     private val _registrationState = MutableStateFlow<RegistrationState>(RegistrationState.Idle)
@@ -220,7 +220,7 @@ class FaceViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         RecognitionResult(
                             found = false,
-                            message = "✗ Rostro no reconocido. La similitud es inferior al 60% requerido"
+                            message = "✗ Rostro no reconocido. La similitud es inferior al 80% requerido"
                         )
                     }
                 }
