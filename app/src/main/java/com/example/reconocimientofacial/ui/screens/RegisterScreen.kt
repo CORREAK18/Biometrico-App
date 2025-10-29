@@ -42,6 +42,11 @@ fun RegisterScreen(
 
     val registrationState by viewModel.registrationState.collectAsState()
 
+    // Limpiar el estado de error cuando entras a la pantalla
+    LaunchedEffect(Unit) {
+        viewModel.resetRegistrationState()
+    }
+
     LaunchedEffect(registrationState) {
         if (registrationState is RegistrationState.Success) {
             kotlinx.coroutines.delay(2000)
@@ -195,7 +200,8 @@ fun RegisterScreen(
                             focusedLeadingIconColor = Color(0xFF4CAF50),
                             unfocusedContainerColor = Color.White,
                             focusedContainerColor = Color.White,
-                            focusedTextColor = Color.Black
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black
                         )
                     )
 

@@ -629,7 +629,7 @@ class FaceRecognitionProcessorMejorado {
             dotProduct += embedding1[i] * embedding2[i]
         }
 
-        return (dotProduct + 1) / 2
+        return dotProduct.coerceIn(0f, 1f)
     }
 
     /**
